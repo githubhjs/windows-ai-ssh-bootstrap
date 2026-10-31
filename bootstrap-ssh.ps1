@@ -9,8 +9,8 @@
     current Windows account, disables password/interactive authentication, and
     creates a Private/Domain firewall rule restricted to the supplied IPs/CIDRs.
     It does not configure router port forwarding, public DNS, or WAN exposure.
-    If execution is blocked before this script starts, use the companion
-    run-bootstrap-ssh.cmd launcher; execution policy is checked before script code runs.
+    If execution is blocked before this script starts, use bootstrap-ssh.cmd (standalone) or
+    run-bootstrap-ssh.cmd beside this file; execution policy is checked by the launchers.
 #>
 [CmdletBinding()]
 param(
