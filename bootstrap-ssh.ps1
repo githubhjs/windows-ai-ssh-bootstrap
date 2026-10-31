@@ -5,7 +5,7 @@
 .SYNOPSIS
     Configures Windows OpenSSH Server for key-only, source-restricted access.
 .DESCRIPTION
-    Installs the Windows OpenSSH Server capability, adds one public key for the
+    Installs the Windows OpenSSH Server capability, adds public keys for the
     current Windows account, disables password/interactive authentication, and
     creates a Private/Domain firewall rule restricted to the supplied IPs/CIDRs.
     It does not configure router port forwarding, public DNS, or WAN exposure.
@@ -23,7 +23,10 @@ param(
 
     [Parameter()]
     [ValidateSet('Domain', 'Private', 'Public')]
-    [string[]] $FirewallProfile = @('Private', 'Domain')
+    [string[]] $FirewallProfile = @('Private', 'Domain'),
+
+    [Parameter()]
+    [switch] $AllowExistingFirewallScopeChange
 )
 
 Set-StrictMode -Version Latest
@@ -60,6 +63,39 @@ function Assert-AllowedRemoteAddress {
     }
 }
 
+function Test-PortFilterIncludesSsh {
+    param($PortFilter)
+
+    if ($PortFilter.Protocol -notin @('TCP', '6', 'Any', '256')) { return $false }
+    foreach ($entry in @($PortFilter.LocalPort)) {
+        foreach ($portSpec in ([string]$entry -split ',')) {
+            $portSpec = $portSpec.Trim()
+            if ($portSpec -eq 'Any' -or $portSpec -eq '22') { return $true }
+            if ($portSpec -match '^(\d+)-(\d+)$') {
+                if ([int]$Matches[1] -le 22 -and [int]$Matches[2] -ge 22) { return $true }
+            }
+        }
+    }
+    return $false
+}
+
+function Test-RemoteScopeContained {
+    param([string[]] $Existing, [string[]] $Requested)
+
+    foreach ($source in $Existing) {
+        if ($Requested -notcontains $source) { return $false }
+    }
+    return $true
+}
+
+function Test-StringSetEqual {
+    param([string[]] $Left, [string[]] $Right)
+
+    $leftSet = @($Left | ForEach-Object { $_.Trim().ToLowerInvariant() } | Sort-Object -Unique)
+    $rightSet = @($Right | ForEach-Object { $_.Trim().ToLowerInvariant() } | Sort-Object -Unique)
+    return [string]::Join("`n", $leftSet) -ceq [string]::Join("`n", $rightSet)
+}
+
 function Set-SshdGlobalDirective {
     param(
         [System.Collections.Generic.List[string]] $Lines,
@@ -86,6 +122,56 @@ function Set-SshdGlobalDirective {
 
 Assert-AllowedRemoteAddress -Addresses $AllowedRemoteAddress
 
+# Windows Firewall rules are additive. Detect effective rules that could keep
+# TCP/22 reachable beyond the requested source set before changing the host.
+$firewallAllowRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -Action Allow -Enabled True)
+$firewallBlockRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -Action Block -Enabled True)
+$exactSshRuleNames = [System.Collections.Generic.List[string]]::new()
+$broaderFirewallConflicts = [System.Collections.Generic.List[string]]::new()
+$blockingFirewallConflicts = [System.Collections.Generic.List[string]]::new()
+foreach ($candidate in $firewallAllowRules) {
+    $portFilter = $candidate | Get-NetFirewallPortFilter
+    if (-not (Test-PortFilterIncludesSsh -PortFilter $portFilter)) { continue }
+
+    $isExactTcp22 = $portFilter.Protocol -in @('TCP', '6') -and @($portFilter.LocalPort).Count -eq 1 -and $portFilter.LocalPort -eq '22'
+    if ($isExactTcp22) {
+        $addressFilter = $candidate | Get-NetFirewallAddressFilter
+        $existingProfiles = @(([string]$candidate.Profile -split '[,\s]+') | Where-Object { $_ })
+        $sameSources = Test-StringSetEqual -Left @($addressFilter.RemoteAddress) -Right $AllowedRemoteAddress
+        $sameProfiles = Test-StringSetEqual -Left $existingProfiles -Right $FirewallProfile
+        if ($candidate.PolicyStoreSourceType -ne 'Local') {
+            $broaderFirewallConflicts.Add("$($candidate.Name) [TCP/22 rule managed by $($candidate.PolicyStoreSourceType)]")
+        } elseif ((-not $sameSources -or -not $sameProfiles) -and -not $AllowExistingFirewallScopeChange) {
+            $broaderFirewallConflicts.Add("$($candidate.Name) [existing sources: $($addressFilter.RemoteAddress -join ', '); profiles: $($existingProfiles -join ', '); requested sources/profiles differ; pass -AllowExistingFirewallScopeChange only if that replacement is intentional]")
+        } else {
+            $exactSshRuleNames.Add($candidate.Name)
+        }
+        continue
+    }
+
+    $addressFilter = $candidate | Get-NetFirewallAddressFilter
+    if (-not (Test-RemoteScopeContained -Existing @($addressFilter.RemoteAddress) -Requested $AllowedRemoteAddress)) {
+        $broaderFirewallConflicts.Add("$($candidate.Name) [ports: $($portFilter.LocalPort); sources: $($addressFilter.RemoteAddress -join ', ')]")
+    }
+}
+# Conservative by design: any enabled inbound block filter that could match
+# TCP/22 causes a stop, even if its address/profile scope may be disjoint.
+foreach ($candidate in $firewallBlockRules) {
+    $portFilter = $candidate | Get-NetFirewallPortFilter
+    if (Test-PortFilterIncludesSsh -PortFilter $portFilter) {
+        $addressFilter = $candidate | Get-NetFirewallAddressFilter
+        $blockingFirewallConflicts.Add("$($candidate.Name) [ports: $($portFilter.LocalPort -join ', '); sources: $($addressFilter.RemoteAddress -join ', ')]")
+    }
+}
+if ($broaderFirewallConflicts.Count -gt 0) {
+    $conflicts = $broaderFirewallConflicts -join '; '
+    throw "Existing inbound allow rule(s) conflict with the requested SSH firewall scope: $conflicts. No SSH/firewall changes were made. Review, narrow, or remove those rules, then rerun."
+}
+if ($blockingFirewallConflicts.Count -gt 0) {
+    $conflicts = $blockingFirewallConflicts -join '; '
+    throw "Existing inbound block rule(s) cover SSH port 22: $conflicts. Block rules can override this bootstrap's allow rule. Resolve them before rerunning. No SSH/firewall changes were made."
+}
+
 if ((-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) -and $AuthorizedKeyPath) {
     if (-not (Test-Path -LiteralPath $AuthorizedKeyPath -PathType Leaf)) {
         throw "Public key file not found: $AuthorizedKeyPath"
@@ -95,7 +181,7 @@ if ((-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) -and $AuthorizedKeyPath
 if (-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) {
     $AuthorizedKey = @((Read-Host 'Paste one SSH public key (ssh-ed25519 ...; public key only)'))
 }
-$publicKeys = @($AuthorizedKey | ForEach-Object { $_ -split "`r?`n" } | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^\s*#' })
+$publicKeys = @($AuthorizedKey | ForEach-Object { $_ -split '\r?\n' } | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^\s*#' })
 if (-not $publicKeys -or $publicKeys.Count -eq 0) {
     throw 'No public keys were supplied.'
 }
@@ -168,14 +254,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "sshd_config validation failed. Original config restored from $backupPath"
 }
 
-# Replace existing exact TCP/22 inbound allow rules with this script's scoped rule.
-# Other ports and broad rules covering multiple ports are left untouched.
-$existingSshRules = Get-NetFirewallRule -Direction Inbound -Action Allow -Enabled True -ErrorAction SilentlyContinue
-foreach ($candidate in $existingSshRules) {
-    $portFilter = $candidate | Get-NetFirewallPortFilter
-    if ($portFilter.Protocol -in @('TCP', '6') -and $portFilter.LocalPort -eq '22') {
-        $candidate | Disable-NetFirewallRule | Out-Null
-    }
+# Replace existing exact TCP/22 rules with the requested scoped rule. Wider
+# multi-port rules were checked above and left alone only when their remote
+# address scope is no broader than this bootstrap's requested scope.
+foreach ($ruleNameToDisable in ($exactSshRuleNames | Select-Object -Unique)) {
+    Get-NetFirewallRule -PolicyStore PersistentStore -Name $ruleNameToDisable -ErrorAction SilentlyContinue |
+        Disable-NetFirewallRule | Out-Null
 }
 
 $ruleName = 'AIAgent-OpenSSH-Limited'
