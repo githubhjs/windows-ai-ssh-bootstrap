@@ -98,6 +98,38 @@ function Test-StringSetEqual {
     return [string]::Join("`n", $leftSet) -ceq [string]::Join("`n", $rightSet)
 }
 
+function Test-FirewallRuleCouldMatchSshd {
+    param(
+        $Rule,
+        [string] $SshdPath
+    )
+
+    # Firewall rules are conjunctive: an Any-port/Any-address rule limited to
+    # another executable, packaged app, or service cannot open SSH for sshd.
+    $applicationFilters = @($Rule | Get-NetFirewallApplicationFilter -ErrorAction Stop)
+    foreach ($filter in $applicationFilters) {
+        $package = [string]$filter.Package
+        if ($package -and $package -notin @('Any', '*')) { return $false }
+
+        $program = [string]$filter.Program
+        if ($program -and $program -notin @('Any', '*')) {
+            $expandedProgram = [Environment]::ExpandEnvironmentVariables($program).Trim('"')
+            $expandedSshdPath = [Environment]::ExpandEnvironmentVariables($SshdPath).Trim('"')
+            if (-not [string]::Equals($expandedProgram, $expandedSshdPath, [StringComparison]::OrdinalIgnoreCase)) {
+                return $false
+            }
+        }
+    }
+
+    $serviceFilters = @($Rule | Get-NetFirewallServiceFilter -ErrorAction Stop)
+    foreach ($filter in $serviceFilters) {
+        $service = [string]$filter.Service
+        if ($service -and $service -notin @('Any', '*', 'sshd')) { return $false }
+    }
+
+    return $true
+}
+
 function Set-SshdGlobalDirective {
     param(
         [System.Collections.Generic.List[string]] $Lines,
@@ -124,16 +156,21 @@ function Set-SshdGlobalDirective {
 
 Assert-AllowedRemoteAddress -Addresses $AllowedRemoteAddress
 
-# Windows Firewall rules are additive. Detect effective rules that could keep
-# TCP/22 reachable beyond the requested source set before changing the host.
-$firewallAllowRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -Action Allow -Enabled True)
-$firewallBlockRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Inbound -Action Block -Enabled True)
+# Windows Firewall rules are additive. Query the store once, then filter in
+# PowerShell so an empty Block-rule result is a normal empty array, not a CIM
+# query failure. Include application and service filters before assessing scope.
+$activeInboundRules = @(Get-NetFirewallRule -PolicyStore ActiveStore -ErrorAction Stop |
+    Where-Object { $_.Direction -eq 'Inbound' -and $_.Enabled -eq 'True' })
+$firewallAllowRules = @($activeInboundRules | Where-Object { $_.Action -eq 'Allow' })
+$firewallBlockRules = @($activeInboundRules | Where-Object { $_.Action -eq 'Block' })
+$sshdPathForFirewallCheck = Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe'
 $exactSshRuleNames = [System.Collections.Generic.List[string]]::new()
 $broaderFirewallConflicts = [System.Collections.Generic.List[string]]::new()
 $blockingFirewallConflicts = [System.Collections.Generic.List[string]]::new()
 foreach ($candidate in $firewallAllowRules) {
     $portFilter = $candidate | Get-NetFirewallPortFilter
     if (-not (Test-PortFilterIncludesSsh -PortFilter $portFilter)) { continue }
+    if (-not (Test-FirewallRuleCouldMatchSshd -Rule $candidate -SshdPath $sshdPathForFirewallCheck)) { continue }
 
     $isExactTcp22 = $portFilter.Protocol -in @('TCP', '6') -and @($portFilter.LocalPort).Count -eq 1 -and $portFilter.LocalPort -eq '22'
     if ($isExactTcp22) {
@@ -161,6 +198,7 @@ foreach ($candidate in $firewallAllowRules) {
 foreach ($candidate in $firewallBlockRules) {
     $portFilter = $candidate | Get-NetFirewallPortFilter
     if (Test-PortFilterIncludesSsh -PortFilter $portFilter) {
+        if (-not (Test-FirewallRuleCouldMatchSshd -Rule $candidate -SshdPath $sshdPathForFirewallCheck)) { continue }
         $addressFilter = $candidate | Get-NetFirewallAddressFilter
         $blockingFirewallConflicts.Add("$($candidate.Name) [ports: $($portFilter.LocalPort -join ', '); sources: $($addressFilter.RemoteAddress -join ', ')]")
     }

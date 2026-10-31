@@ -18,6 +18,9 @@ Claude Code, or another authorized agent can administer it over a trusted LAN/VP
   override the new allow rule. This check is deliberately conservative: it stops for any enabled
   inbound block filter that could match TCP/22, regardless of its address or profile scope; review
   the named rule manually rather than deleting it automatically.
+- When checking existing TCP/22 rules, also checks the Windows Firewall application and service
+  filters. A broad port/address rule limited to another executable, packaged app, or service is not
+  mistaken for an SSH rule. An empty set of block rules is handled normally.
 - Does **not** create router port forwarding, public DNS, a VPN, or a public SSH service.
 
 Use a private LAN or VPN for remote agents. If a source must be added, specify its observed source IP
