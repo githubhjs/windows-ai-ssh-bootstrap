@@ -217,10 +217,19 @@ if ((-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) -and $AuthorizedKeyPath
     $AuthorizedKey = @(Get-Content -LiteralPath $AuthorizedKeyPath)
 }
 if (-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) {
-    # GX10's public client key. The private half stays on GX10. Generating a
-    # key on this Windows SSH server would authorize the reverse direction.
-    $AuthorizedKey = @('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOXvnrP1nsvgwpj4e+Ru0oklgYd5XTFhuRzFFNuhrwDj hjs@gx10-0cef')
-    Write-Host 'Using the embedded GX10 Ed25519 client public key; no key paste is needed.' -ForegroundColor Cyan
+    # Client identities for the user's owned infrastructure. The private
+    # halves remain on their respective hosts. Generating a key on this
+    # Windows SSH server would authorize the reverse direction.
+    $AuthorizedKey = @(
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOXvnrP1nsvgwpj4e+Ru0oklgYd5XTFhuRzFFNuhrwDj hjs@gx10-0cef'
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJCW4dpZ7f9M9YuqoqsF/T5wP7xrO20Ym/wHJD/BxI+q opc@instance-20240327-1300-alwaysfree'
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFccHhpwQR5Lg1VZHWbviAvwdA/OGHIo0/kXExJZreV ubuntu@sanjose-amd'
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINZX8Rnkz5UKsk0GQcBQ9BFmcVnK4wSzrVxsYJlfPy2o hjs@gcp-oregon'
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGA83Wz77vU2X+X+gHrmwHu8t+1aT3cNd0/+Lcq0a8tp hjs@sanjose-vps'
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFhNnWN9/lf9JboHqOO1zbglmpg6zoMQhjWz6GdZ/T1q huangjs@ER-6p-6port-j'
+        'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPTpRrig7KGuNHTQcZ6rUImT6juVQTjozdcUd7Inryku huangjs@DESKTOP-QAT0GEK'
+    )
+    Write-Host 'Using the seven embedded GX10/server/router Ed25519 client public keys; no key paste is needed.' -ForegroundColor Cyan
 }
 $publicKeys = @($AuthorizedKey | ForEach-Object { $_ -split '\r?\n' } | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^\s*#' })
 if (-not $publicKeys -or $publicKeys.Count -eq 0) {

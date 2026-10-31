@@ -7,8 +7,9 @@ trusted LAN/VPN.
 ## Security defaults
 
 - Installs Microsoft's Windows OpenSSH Server capability.
-- Adds GX10's **public** Ed25519 client key for the account running the elevated script. The private
-  key remains on GX10. You can still pass another public key explicitly.
+- Adds seven **public** Ed25519 client keys for GX10, Osaka OPC, San Jose, GCP Oregon, and the home
+  and office EdgeRouters, plus the San Jose VPS identity, for the account running the elevated
+  script. Private keys stay on their respective hosts. You can still pass other public keys.
 - Disables SSH password and keyboard-interactive authentication; requires public-key authentication.
 - Restricts SSH logins to that Windows account.
 - Allows TCP/22 only from `LocalSubnet` by default, on the Private and Domain firewall profiles.
@@ -54,10 +55,10 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 Do not use `Unrestricted` or change `LocalMachine` policy for this setup. If Group Policy overrides
 the process setting, stop and ask the device administrator rather than trying to bypass that policy.
-The script requires an elevated shell. It uses GX10's embedded public key by default, so there is no
-paste prompt. This public repository is personalized for Josh's devices: running it authorizes the
-holder of GX10's matching private key to sign in to the configured Windows account. Do not run it on
-someone else's computer.
+The script requires an elevated shell. It uses the seven embedded infrastructure public keys by
+default, so there is no paste prompt. This public repository is personalized for Josh's devices:
+running it authorizes holders of those matching private keys to sign in to the configured Windows
+account. Do not run it on someone else's computer.
 
 For the easiest one-file setup, download [`bootstrap-ssh.cmd`](bootstrap-ssh.cmd), open **Command
 Prompt as Administrator** in its folder, and run `bootstrap-ssh.cmd`. It contains a compressed copy
@@ -74,9 +75,11 @@ For a single download, get [`dist/windows-ai-ssh-bootstrap.zip`](dist/windows-ai
 extract it, then run `run-bootstrap-ssh.cmd` from an elevated Command Prompt in the extracted folder.
 The archive contains both launch options, the PowerShell implementation, and these instructions.
 
-The default embedded client public key is GX10's existing Ed25519 key. It has no passphrase, and the
-bootstrap installs it automatically. A Windows-host-generated key is not appropriate here: the
-Windows machine is the SSH server, while GX10 is the SSH client.
+The bootstrap automatically installs GX10, Osaka OPC, San Jose, GCP Oregon, and both EdgeRouter
+client public keys. No private keys are copied. A Windows-host-generated key is not appropriate for
+inbound agent access: the Windows machine is the SSH server, while those machines are SSH clients.
+The firewall still defaults to `LocalSubnet`; remote hosts need an existing VPN/reverse-tunnel path
+or a separately configured narrow source range to reach TCP/22.
 
 ```powershell
 # Optional: replace the default GX10 key with another client public key.

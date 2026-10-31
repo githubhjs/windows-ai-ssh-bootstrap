@@ -10,7 +10,9 @@ MachinePolicy or UserPolicy override. Do not bypass organization policy.
 
 Alternative: run-bootstrap-ssh.cmd uses the separate bootstrap-ssh.ps1 beside it.
 
-The bootstrap automatically authorizes GX10's public Ed25519 client key; no paste is needed. Its
-private key remains on GX10. Running this personalized script authorizes GX10 to sign in to the
-configured Windows account. Default firewall source is LocalSubnet; no router or internet-facing
-SSH is configured.
+The bootstrap automatically authorizes seven curated public client keys for GX10, Osaka OPC, San
+Jose, GCP Oregon, and the home/office EdgeRouters, plus the San Jose VPS identity. Private keys stay
+on their respective hosts. The 49-key union is not used because it includes retired, temporary, and
+third-party keys. This personalized script authorizes the listed infrastructure clients. Default
+firewall source is LocalSubnet; remote servers need an existing VPN/reverse tunnel or a separate
+narrow source rule. No router port-forwarding or internet-facing SSH is configured.
