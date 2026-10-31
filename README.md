@@ -85,6 +85,36 @@ inbound agent access: the Windows machine is the SSH server, while those machine
 The firewall still defaults to `LocalSubnet`; remote hosts need an existing VPN/reverse-tunnel path
 or a separately configured narrow source range to reach TCP/22.
 
+## Reverse tunnel for roaming or off-LAN PCs
+
+Use a separate reverse-tunnel command when an authorized PC must remain reachable while it is away
+from the home LAN. It first configures Windows OpenSSH Server with the same seven public client keys
+and a `LocalSubnet` inbound rule, then creates a separate passphrase-free Ed25519 **client** key for
+the selected hub. The private key is stored under `C:\ProgramData\ssh\win-tunnel`, owned by SYSTEM,
+and readable only by SYSTEM. A SYSTEM startup task reconnects after network changes and Windows
+restarts. The remote command creates no router forwarding or public inbound firewall rule.
+
+Download and run one CMD as Administrator, based on the hub you want this PC to call:
+
+- [`bootstrap-ssh-remote-gx10.cmd`](bootstrap-ssh-remote-gx10.cmd) — public endpoint `g.hjs.space:1032`; on the home LAN it first tries `192.168.2.93:22` to avoid NAT loopback.
+- [`bootstrap-ssh-remote-osaka.cmd`](bootstrap-ssh-remote-osaka.cmd) — `osaka-v4.hjs.space:22`.
+- [`bootstrap-ssh-remote-sjamd.cmd`](bootstrap-ssh-remote-sjamd.cmd) — `sjamd-v4.hjs.space:22` (the SJ SSH endpoint was unreachable during the 2026-11-01 validation; the command will wait and retry).
+
+Each hub gets its own key and scheduled task. The tunnel port is derived deterministically from the
+device's Windows System UUID into 20000–59999; the port is an identifier, not a secret. The server
+must enroll that device's public key with an exact `permitlisten="127.0.0.1:<port>"` restriction
+before the tunnel can authenticate. The CMD prints only the public key and its fingerprint; it never
+prints or uploads the private key. On a PC that is already reachable over the LAN, the administrator
+can retrieve that public key through the existing trusted SSH path and enroll it directly without
+asking the PC owner to copy it. A brand-new off-LAN PC still needs this one-time server-side key
+enrollment through a trusted channel.
+
+GX10 is port **1032**. Port **1034** is the EdgeRouter SSH mapping, not GX10. From a LAN PC, do not
+use the public GX10 endpoint as proof of connectivity: NAT hairpinning may fail. The GX10 endpoint
+and host-key pin were verified from the Osaka VPS; the HP 14s tunnel was tested to GX10's private
+LAN address and separately to Osaka. See [`REMOTE_TUNNEL_DESIGN.md`](REMOTE_TUNNEL_DESIGN.md) for
+server restrictions, test evidence, and the SJ AMD blocker.
+
 On completion, it prints a **safe-to-share connection handoff** with hostname, SSH username, active
 network profile, IPv4 addresses and interface names, SSH service status, authorized key labels, and
 ready-to-run GX10 SSH commands. It does not print private keys or passwords. Public-profile networks
@@ -144,3 +174,6 @@ keys, passwords, or host-specific network details.
   requires explicitly passing `-FirewallProfile Public` and a narrow source address.
 - Remote access may require a VPN or an existing private tunnel. This script intentionally does not
   alter routers, NAT, DNS, or Cloudflare settings.
+- Reverse-tunnel commands require the hub's dedicated `win-tunnel` account and a server-side
+  per-device public-key enrollment. Do not run the remote CMD on an untrusted PC; the enrolled hub
+  key grants that PC only its assigned loopback listener.
