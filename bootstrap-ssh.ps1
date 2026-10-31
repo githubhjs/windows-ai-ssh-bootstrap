@@ -13,7 +13,7 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string] $AuthorizedKey,
+    [string[]] $AuthorizedKey,
 
     [Parameter()]
     [string] $AuthorizedKeyPath,
@@ -86,17 +86,23 @@ function Set-SshdGlobalDirective {
 
 Assert-AllowedRemoteAddress -Addresses $AllowedRemoteAddress
 
-if ([string]::IsNullOrWhiteSpace($AuthorizedKey) -and $AuthorizedKeyPath) {
+if ((-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) -and $AuthorizedKeyPath) {
     if (-not (Test-Path -LiteralPath $AuthorizedKeyPath -PathType Leaf)) {
         throw "Public key file not found: $AuthorizedKeyPath"
     }
-    $AuthorizedKey = (Get-Content -LiteralPath $AuthorizedKeyPath -Raw).Trim()
+    $AuthorizedKey = @(Get-Content -LiteralPath $AuthorizedKeyPath)
 }
-if ([string]::IsNullOrWhiteSpace($AuthorizedKey)) {
-    $AuthorizedKey = (Read-Host 'Paste one SSH public key (ssh-ed25519 ...; public key only)').Trim()
+if (-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) {
+    $AuthorizedKey = @((Read-Host 'Paste one SSH public key (ssh-ed25519 ...; public key only)'))
 }
-if ($AuthorizedKey -match '[\r\n]' -or $AuthorizedKey -notmatch '^(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|ssh-rsa)\s+[A-Za-z0-9+/]+={0,2}(\s+.*)?$') {
-    throw 'The supplied value is not one supported OpenSSH public-key line. Do not provide a private key.'
+$publicKeys = @($AuthorizedKey | ForEach-Object { $_ -split "`r?`n" } | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^\s*#' })
+if (-not $publicKeys -or $publicKeys.Count -eq 0) {
+    throw 'No public keys were supplied.'
+}
+foreach ($publicKey in $publicKeys) {
+    if ($publicKey -notmatch '^(ssh-ed25519|sk-ssh-ed25519@openssh\.com|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|ssh-rsa)\s+[A-Za-z0-9+/]+={0,2}(\s+.*)?$') {
+        throw 'A supplied value is not a supported OpenSSH public-key line. Do not provide a private key.'
+    }
 }
 
 $capabilityName = 'OpenSSH.Server~~~~0.0.1.0'
@@ -132,8 +138,13 @@ if (-not (Test-Path -LiteralPath $authorizedKeysPath)) {
     New-Item -ItemType File -Path $authorizedKeysPath -Force | Out-Null
 }
 $existingKeys = @(Get-Content -LiteralPath $authorizedKeysPath -ErrorAction SilentlyContinue)
-if ($existingKeys -notcontains $AuthorizedKey) {
-    Add-Content -LiteralPath $authorizedKeysPath -Value $AuthorizedKey -Encoding ascii
+$addedKeyCount = 0
+foreach ($publicKey in $publicKeys) {
+    if ($existingKeys -notcontains $publicKey) {
+        Add-Content -LiteralPath $authorizedKeysPath -Value $publicKey -Encoding ascii
+        $existingKeys += $publicKey
+        $addedKeyCount++
+    }
 }
 $icaclsArgs = @($authorizedKeysPath, '/inheritance:r', '/grant:r') + $aclSpec
 & "$env:WINDIR\System32\icacls.exe" @icaclsArgs | Out-Null
@@ -182,6 +193,7 @@ Write-Host ''
 Write-Host 'OpenSSH Server is configured for public-key-only login.' -ForegroundColor Green
 Write-Host "Windows account: $accountName"
 Write-Host "Authorized key file: $authorizedKeysPath"
+Write-Host "Public keys added: $addedKeyCount"
 Write-Host "Allowed source addresses: $($AllowedRemoteAddress -join ', ')"
 Write-Host "Firewall profiles: $($FirewallProfile -join ', ')"
 Write-Host 'Firewall rule: AIAgent-OpenSSH-Limited (TCP/22)'

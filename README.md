@@ -6,7 +6,7 @@ Claude Code, or another authorized agent can administer it over a trusted LAN/VP
 ## Security defaults
 
 - Installs Microsoft's Windows OpenSSH Server capability.
-- Adds one **public** key for the account running the elevated script.
+- Adds one or more **public** keys for the account running the elevated script.
 - Disables SSH password and keyboard-interactive authentication; requires public-key authentication.
 - Restricts SSH logins to that Windows account.
 - Allows TCP/22 only from `LocalSubnet` by default, on the Private and Domain firewall profiles.
@@ -32,7 +32,8 @@ notepad $script
 ```
 
 Then run it with a trusted agent's public key. The public key is safe to pass on the command line;
-never use a private key here.
+never use a private key here. To add multiple clients, put their public keys on separate lines in a
+`.pub` file and pass its path.
 
 ```powershell
 $key = (Get-Content "$HOME\.ssh\id_ed25519.pub" -Raw).Trim()
@@ -46,8 +47,8 @@ its exact source IP or a narrow CIDR:
 & $script -AuthorizedKey $key -AllowedRemoteAddress @('192.168.2.93', '10.20.0.0/24')
 ```
 
-If the key is already stored in a file, use `-AuthorizedKeyPath 'C:\path\to\agent.pub'` instead.
-The script prompts for a public key if neither key parameter is supplied.
+For multiple agent keys in one file, use `-AuthorizedKeyPath 'C:\path\to\agents.pub'`. The script
+prompts for one public key if neither key parameter is supplied.
 
 ## Verify from the allowed client
 
@@ -72,7 +73,7 @@ keys, passwords, or host-specific network details.
 
 - Run from an elevated PowerShell session with administrator rights and internet access to the
   Microsoft capability source.
-- The script configures only the current account. Other accounts are intentionally not enabled.
+- The script configures only the current account. Other Windows accounts are intentionally not enabled.
 - Firewall defaults assume local/VPN access on Private or Domain profiles. Public-profile access
   requires explicitly passing `-FirewallProfile Public` and a narrow source address.
 - Remote access may require a VPN or an existing private tunnel. This script intentionally does not
