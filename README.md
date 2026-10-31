@@ -7,6 +7,10 @@ trusted LAN/VPN.
 ## Security defaults
 
 - Installs Microsoft's Windows OpenSSH Server capability.
+- Handles first install by starting `sshd` once to let Windows create
+  `%ProgramData%\ssh\sshd_config`, with all known TCP/22 allow rules disabled
+  during that initialization; the scoped firewall rule is added after config
+  validation.
 - Adds seven **public** Ed25519 client keys for GX10, Osaka OPC, San Jose, GCP Oregon, and the home
   and office EdgeRouters, plus the San Jose VPS identity, for the account running the elevated
   script. Private keys stay on their respective hosts. You can still pass other public keys.
@@ -118,6 +122,10 @@ editing it. Re-run the same command to update the key or allowed sources. Centra
 firewall policies may still add separate rules and should be reviewed by the device administrator.
 Scope comparison is deliberately conservative and textual; semantically equivalent but differently
 written IP/CIDR ranges may require resolving the conflicting rule manually.
+
+If a previous run installed the OpenSSH capability but stopped at “OpenSSH configuration was not
+found”, download and run the latest `bootstrap-ssh.cmd` again. The current script handles this
+first-start initialization itself; do not manually paste keys or create the config file.
 
 ## Access the script
 

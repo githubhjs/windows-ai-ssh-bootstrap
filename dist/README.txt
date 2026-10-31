@@ -17,6 +17,10 @@ third-party keys. This personalized script authorizes the listed infrastructure 
 firewall source is LocalSubnet; remote servers need an existing VPN/reverse tunnel or a separate
 narrow source rule. No router port-forwarding or internet-facing SSH is configured.
 
+On a first install, Windows may not create %ProgramData%\ssh\sshd_config until sshd starts. The
+script temporarily disables known TCP/22 allow rules, starts sshd to generate its default config,
+stops the service, then edits and validates the config before adding the restricted firewall rule.
+
 On success, the script prints a safe-to-share connection handoff: hostname, SSH username, network
 profiles, IPv4 addresses and interface names, firewall/service status, authorized key labels, and
 ready-to-run SSH commands from GX10. It never prints private keys or passwords.

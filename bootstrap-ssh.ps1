@@ -257,7 +257,39 @@ if ([string]::IsNullOrWhiteSpace($accountName)) { throw 'Could not determine the
 $sshDataDirectory = Join-Path $env:ProgramData 'ssh'
 $configPath = Join-Path $sshDataDirectory 'sshd_config'
 if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
-    throw "OpenSSH configuration was not found at $configPath"
+    # Windows creates ProgramData\ssh\sshd_config when sshd is first started.
+    # The OpenSSH capability installer can leave its default TCP/22 firewall
+    # rule enabled, so close the inbound path before starting sshd to generate
+    # the initial config. The final restricted firewall rule is installed only
+    # after the config has been edited and validated below.
+    Write-Host 'First OpenSSH setup: generating the default server config with TCP/22 inbound rules disabled.' -ForegroundColor Yellow
+    $rulesToDisable = @($exactSshRuleNames | Select-Object -Unique) + @('OpenSSH-Server-In-TCP', 'AIAgent-OpenSSH-Limited')
+    foreach ($ruleNameToDisable in ($rulesToDisable | Select-Object -Unique)) {
+        Get-NetFirewallRule -PolicyStore PersistentStore -Name $ruleNameToDisable -ErrorAction SilentlyContinue |
+            Disable-NetFirewallRule -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    $sshdService = Get-Service -Name sshd -ErrorAction Stop
+    if ($sshdService.Status -eq 'Running') { Stop-Service -Name sshd -Force }
+    Start-Service -Name sshd -ErrorAction Stop
+    try {
+        $configDeadline = (Get-Date).AddSeconds(30)
+        while (-not (Test-Path -LiteralPath $configPath -PathType Leaf) -and (Get-Date) -lt $configDeadline) {
+            Start-Sleep -Milliseconds 500
+        }
+    } finally {
+        Stop-Service -Name sshd -Force -ErrorAction SilentlyContinue
+    }
+
+    # Starting sshd may create its standard firewall rule on some Windows
+    # builds. Keep that rule disabled; the scoped rule is added after validation.
+    Get-NetFirewallRule -PolicyStore PersistentStore -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue |
+        Disable-NetFirewallRule -ErrorAction SilentlyContinue | Out-Null
+
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+        throw "OpenSSH did not generate its initial configuration at $configPath. TCP/22 remains closed; inspect the sshd service and retry."
+    }
+    if ($exactSshRuleNames -notcontains 'OpenSSH-Server-In-TCP') { $exactSshRuleNames.Add('OpenSSH-Server-In-TCP') }
 }
 
 if ($isAdministrator) {
