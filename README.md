@@ -91,7 +91,8 @@ Use a separate reverse-tunnel command when an authorized PC must remain reachabl
 from the home LAN. It first configures Windows OpenSSH Server with the same seven public client keys
 and a `LocalSubnet` inbound rule, then creates a separate passphrase-free Ed25519 **client** key for
 the selected hub. The private key is stored under `C:\ProgramData\ssh\win-tunnel`, owned by SYSTEM,
-and readable only by SYSTEM. A SYSTEM startup task reconnects after network changes and Windows
+and readable only by SYSTEM. Public host-key pins are readable by SYSTEM and Administrators so an
+elevated rerun can safely refresh them. A SYSTEM startup task reconnects after network changes and Windows
 restarts. The remote command creates no router forwarding or public inbound firewall rule.
 
 Download and run one CMD as Administrator, based on the hub you want this PC to call:

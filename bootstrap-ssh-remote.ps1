@@ -154,6 +154,7 @@ if ($TunnelPort -eq 0) {
 }
 
 $systemSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+$administratorsSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
 $keyAcl = Get-Acl -LiteralPath $keyPath
 $keyAcl.SetAccessRuleProtection($true, $false)
 foreach ($rule in @($keyAcl.Access)) { [void]$keyAcl.RemoveAccessRuleAll($rule) }
@@ -167,6 +168,14 @@ $keyAcl.SetAccessRule($systemRule)
 Set-Acl -LiteralPath $keyPath -AclObject $keyAcl
 
 $knownHosts = ($profile.KnownHosts -join "`r`n") + "`r`n"
+if (Test-Path -LiteralPath $knownHostsPath) {
+    # The file contains only public host keys. Restore the inherited admin ACL
+    # before replacing it so an elevated rerun can update a prior SYSTEM-owned file.
+    $existingHostFileAcl = Get-Acl -LiteralPath $knownHostsPath
+    $existingHostFileAcl.SetOwner($administratorsSid)
+    $existingHostFileAcl.SetAccessRuleProtection($false, $true)
+    Set-Acl -LiteralPath $knownHostsPath -AclObject $existingHostFileAcl
+}
 [IO.File]::WriteAllText($knownHostsPath, $knownHosts, [Text.Encoding]::ASCII)
 Copy-Item -LiteralPath $PSCommandPath -Destination $agentPath -Force
 
@@ -175,6 +184,12 @@ $hostFileAcl.SetAccessRuleProtection($true, $false)
 foreach ($rule in @($hostFileAcl.Access)) { [void]$hostFileAcl.RemoveAccessRuleAll($rule) }
 $hostFileAcl.SetOwner($systemSid)
 $hostFileAcl.SetAccessRule($systemRule)
+$administratorsRule = [Security.AccessControl.FileSystemAccessRule]::new(
+    $administratorsSid,
+    [Security.AccessControl.FileSystemRights]::FullControl,
+    [Security.AccessControl.AccessControlType]::Allow
+)
+$hostFileAcl.SetAccessRule($administratorsRule)
 Set-Acl -LiteralPath $knownHostsPath -AclObject $hostFileAcl
 
 $config = [ordered]@{
