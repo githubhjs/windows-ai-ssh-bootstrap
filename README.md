@@ -81,6 +81,11 @@ inbound agent access: the Windows machine is the SSH server, while those machine
 The firewall still defaults to `LocalSubnet`; remote hosts need an existing VPN/reverse-tunnel path
 or a separately configured narrow source range to reach TCP/22.
 
+On completion, it prints a **safe-to-share connection handoff** with hostname, SSH username, active
+network profile, IPv4 addresses and interface names, SSH service status, authorized key labels, and
+ready-to-run GX10 SSH commands. It does not print private keys or passwords. Public-profile networks
+are flagged because the default firewall rule only covers Private and Domain profiles.
+
 ```powershell
 # Optional: replace the default GX10 key with another client public key.
 & $script -AuthorizedKeyPath 'C:\path\to\agents.pub'

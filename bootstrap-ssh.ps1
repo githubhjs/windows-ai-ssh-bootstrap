@@ -321,6 +321,35 @@ New-NetFirewallRule -Name $ruleName `
 
 Set-Service -Name sshd -StartupType Automatic
 Restart-Service -Name sshd
+$sshdStatus = (Get-Service -Name sshd).Status
+if ($sshdStatus -ne 'Running') { throw "OpenSSH Server is not running after restart (status: $sshdStatus)." }
+
+$ipv4Addresses = @(
+    Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.AddressState -eq 'Preferred' -and
+            $_.InterfaceAlias -notmatch 'Loopback' -and
+            $_.IPAddress -notmatch '^(127\.|169\.254\.)' -and
+            -not $_.SkipAsSource
+        } |
+        Sort-Object -Property InterfaceIndex, IPAddress |
+        Select-Object InterfaceAlias, IPAddress -Unique
+)
+$networkProfiles = @(
+    Get-NetConnectionProfile -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPv4Connectivity -ne 'Disconnected' } |
+        ForEach-Object { "$($_.Name): $($_.NetworkCategory)" } |
+        Sort-Object -Unique
+)
+$firewallRuleState = Get-NetFirewallRule -Name $ruleName -ErrorAction Stop
+$firewallPortState = $firewallRuleState | Get-NetFirewallPortFilter
+$firewallAddressState = $firewallRuleState | Get-NetFirewallAddressFilter
+$clientKeyLabels = @(
+    $publicKeys | ForEach-Object {
+        $parts = $_ -split '\s+', 3
+        if ($parts.Count -ge 3 -and $parts[2]) { $parts[2] } else { $parts[0] }
+    }
+)
 
 Write-Host ''
 Write-Host 'OpenSSH Server is configured for public-key-only login.' -ForegroundColor Green
@@ -332,4 +361,26 @@ Write-Host "Firewall profiles: $($FirewallProfile -join ', ')"
 Write-Host 'Firewall rule: AIAgent-OpenSSH-Limited (TCP/22)'
 Write-Host "Config backup: $backupPath"
 Write-Host 'No router port forwarding or public exposure was configured.'
-Write-Host 'From an allowed client, verify with: ssh <windows-user>@<device-ip> hostname'
+Write-Host ''
+Write-Host '=== CONNECTION HANDOFF (safe to share; no secrets) ===' -ForegroundColor Cyan
+Write-Host "Device: $env:COMPUTERNAME"
+Write-Host "Windows SSH user: $accountName"
+Write-Host "Windows identity: $($currentIdentity.Name)"
+Write-Host "OpenSSH service: $sshdStatus"
+Write-Host "Network profile(s): $(if ($networkProfiles.Count) { $networkProfiles -join '; ' } else { 'unknown' })"
+Write-Host "Firewall rule: enabled=$($firewallRuleState.Enabled); protocol=$($firewallPortState.Protocol); port=$($firewallPortState.LocalPort); profiles=$($firewallRuleState.Profile)"
+Write-Host "TCP/22 allowed sources: $($firewallAddressState.RemoteAddress -join ', ')"
+Write-Host "Authorized client keys ($($publicKeys.Count)): $($clientKeyLabels -join ', ')"
+if ($ipv4Addresses.Count -eq 0) {
+    Write-Host 'IPv4 address: none detected; connect this PC to the intended LAN/VPN and rerun the report.' -ForegroundColor Yellow
+} else {
+    Write-Host 'GX10 commands (run from GX10; choose an address reachable from GX10):'
+    foreach ($address in $ipv4Addresses) {
+        Write-Host "  [$($address.InterfaceAlias)] $($address.IPAddress)"
+        Write-Host "  ssh -o BatchMode=yes -o ConnectTimeout=10 -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 $accountName@$($address.IPAddress) hostname"
+    }
+}
+if (@($networkProfiles | Where-Object { $_ -match ': Public$' }).Count -gt 0 -and $FirewallProfile -notcontains 'Public') {
+    Write-Host 'WARNING: This PC is on a Public network profile, but the SSH allow rule excludes Public. The listed command will not connect until the network is trusted and its profile is Private/Domain.' -ForegroundColor Yellow
+}
+Write-Host 'If a connection fails, share this entire handoff block plus the exact SSH error; never share a private key or password.'

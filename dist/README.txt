@@ -16,3 +16,7 @@ on their respective hosts. The 49-key union is not used because it includes reti
 third-party keys. This personalized script authorizes the listed infrastructure clients. Default
 firewall source is LocalSubnet; remote servers need an existing VPN/reverse tunnel or a separate
 narrow source rule. No router port-forwarding or internet-facing SSH is configured.
+
+On success, the script prints a safe-to-share connection handoff: hostname, SSH username, network
+profiles, IPv4 addresses and interface names, firewall/service status, authorized key labels, and
+ready-to-run SSH commands from GX10. It never prints private keys or passwords.
