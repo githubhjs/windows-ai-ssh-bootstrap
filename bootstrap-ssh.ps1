@@ -217,7 +217,10 @@ if ((-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) -and $AuthorizedKeyPath
     $AuthorizedKey = @(Get-Content -LiteralPath $AuthorizedKeyPath)
 }
 if (-not $AuthorizedKey -or $AuthorizedKey.Count -eq 0) {
-    $AuthorizedKey = @((Read-Host 'Paste one SSH public key (ssh-ed25519 ...; public key only)'))
+    # GX10's public client key. The private half stays on GX10. Generating a
+    # key on this Windows SSH server would authorize the reverse direction.
+    $AuthorizedKey = @('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOXvnrP1nsvgwpj4e+Ru0oklgYd5XTFhuRzFFNuhrwDj hjs@gx10-0cef')
+    Write-Host 'Using the embedded GX10 Ed25519 client public key; no key paste is needed.' -ForegroundColor Cyan
 }
 $publicKeys = @($AuthorizedKey | ForEach-Object { $_ -split '\r?\n' } | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^\s*#' })
 if (-not $publicKeys -or $publicKeys.Count -eq 0) {
