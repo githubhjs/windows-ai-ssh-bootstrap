@@ -25,10 +25,7 @@ param(
 
     [Parameter()]
     [ValidateSet('Domain', 'Private', 'Public')]
-    [string[]] $FirewallProfile = @('Private', 'Domain'),
-
-    [Parameter()]
-    [switch] $AllowExistingFirewallScopeChange
+    [string[]] $FirewallProfile = @('Private', 'Domain')
 )
 
 Set-StrictMode -Version Latest
@@ -180,9 +177,10 @@ foreach ($candidate in $firewallAllowRules) {
         $sameProfiles = Test-StringSetEqual -Left $existingProfiles -Right $FirewallProfile
         if ($candidate.PolicyStoreSourceType -ne 'Local') {
             $broaderFirewallConflicts.Add("$($candidate.Name) [TCP/22 rule managed by $($candidate.PolicyStoreSourceType)]")
-        } elseif ((-not $sameSources -or -not $sameProfiles) -and -not $AllowExistingFirewallScopeChange) {
-            $broaderFirewallConflicts.Add("$($candidate.Name) [existing sources: $($addressFilter.RemoteAddress -join ', '); profiles: $($existingProfiles -join ', '); requested sources/profiles differ; pass -AllowExistingFirewallScopeChange only if that replacement is intentional]")
         } else {
+            if (-not $sameSources -or -not $sameProfiles) {
+                Write-Host "Will replace local TCP/22 rule '$($candidate.Name)' (sources: $($addressFilter.RemoteAddress -join ', '); profiles: $($existingProfiles -join ', ')) with the requested restricted rule." -ForegroundColor Yellow
+            }
             $exactSshRuleNames.Add($candidate.Name)
         }
         continue
@@ -294,9 +292,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "sshd_config validation failed. Original config restored from $backupPath"
 }
 
-# Replace existing exact TCP/22 rules with the requested scoped rule. Wider
-# multi-port rules were checked above and left alone only when their remote
-# address scope is no broader than this bootstrap's requested scope.
+# Replace local exact TCP/22 rules that can match sshd with the requested scoped
+# rule. Centrally managed rules and wider multi-port rules were rejected above.
 foreach ($ruleNameToDisable in ($exactSshRuleNames | Select-Object -Unique)) {
     Get-NetFirewallRule -PolicyStore PersistentStore -Name $ruleNameToDisable -ErrorAction SilentlyContinue |
         Disable-NetFirewallRule | Out-Null

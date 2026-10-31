@@ -85,10 +85,11 @@ its exact source IP or a narrow CIDR:
 & $script -AuthorizedKey $key -AllowedRemoteAddress @('192.168.2.93', '10.20.0.0/24')
 ```
 
-If the target already has an exact TCP/22 rule whose source/profile scope differs from the requested
-scope, the script stops rather than silently widening or narrowing it. Pass
-`-AllowExistingFirewallScopeChange` only after reviewing the existing rule and intentionally
-replacing its scope. Conflicting multi-port rules and inbound block rules must be resolved manually.
+If the target already has a locally managed exact TCP/22 rule that can match `sshd`, the script
+disables that rule and replaces it with the requested source/profile scope. This prevents the old
+rule from continuing to allow SSH from `Any`. It refuses to modify centrally managed exact rules,
+and stops for broader multi-port rules or matching inbound block rules because those need separate
+review.
 
 For multiple agent keys in one file, use `-AuthorizedKeyPath 'C:\path\to\agents.pub'`. The script
 prompts for one public key if neither key parameter is supplied.
