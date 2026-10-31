@@ -101,7 +101,7 @@ Download and run one CMD as Administrator, based on the hub you want this PC to 
 - [Download the Oracle Osaka reverse-tunnel CMD](https://link.hjs.space/windows-ssh-osaka) — `osaka-v4.hjs.space:22`.
 - [Download the Oracle SJ AMD reverse-tunnel CMD](https://link.hjs.space/windows-ssh-sjamd) — `sjamd-v4.hjs.space:22` (the TCP port responded during the 2026-11-01 validation, but the SSH banner timed out; the command is prepared and will retry).
 
-See the [reverse-tunnel design and validation record](https://link.hjs.space/windows-ssh-remote-guide) for server-side confinement, enrollment requirements, and test evidence.
+See the [reverse-tunnel design and validation record](https://link.hjs.space/windows-ssh-remote-guide-latest) for server-side confinement, enrollment requirements, and test evidence.
 
 Each hub gets its own key and scheduled task. The tunnel port is derived deterministically from the
 device's Windows System UUID into 20000–59999; the port is an identifier, not a secret. The server
