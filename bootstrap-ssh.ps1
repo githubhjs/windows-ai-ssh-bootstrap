@@ -106,7 +106,7 @@ function Test-FirewallRuleCouldMatchSshd {
 
     # Firewall rules are conjunctive: an Any-port/Any-address rule limited to
     # another executable, packaged app, or service cannot open SSH for sshd.
-    $applicationFilters = @($Rule | Get-NetFirewallApplicationFilter -ErrorAction Stop)
+    $applicationFilters = @($Rule | Get-NetFirewallApplicationFilter -PolicyStore ActiveStore -ErrorAction Stop)
     foreach ($filter in $applicationFilters) {
         $package = [string]$filter.Package
         if ($package -and $package -notin @('Any', '*')) { return $false }
@@ -121,7 +121,7 @@ function Test-FirewallRuleCouldMatchSshd {
         }
     }
 
-    $serviceFilters = @($Rule | Get-NetFirewallServiceFilter -ErrorAction Stop)
+    $serviceFilters = @($Rule | Get-NetFirewallServiceFilter -PolicyStore ActiveStore -ErrorAction Stop)
     foreach ($filter in $serviceFilters) {
         $service = [string]$filter.Service
         if ($service -and $service -notin @('Any', '*', 'sshd')) { return $false }
@@ -168,13 +168,13 @@ $exactSshRuleNames = [System.Collections.Generic.List[string]]::new()
 $broaderFirewallConflicts = [System.Collections.Generic.List[string]]::new()
 $blockingFirewallConflicts = [System.Collections.Generic.List[string]]::new()
 foreach ($candidate in $firewallAllowRules) {
-    $portFilter = $candidate | Get-NetFirewallPortFilter
+    $portFilter = $candidate | Get-NetFirewallPortFilter -PolicyStore ActiveStore
     if (-not (Test-PortFilterIncludesSsh -PortFilter $portFilter)) { continue }
     if (-not (Test-FirewallRuleCouldMatchSshd -Rule $candidate -SshdPath $sshdPathForFirewallCheck)) { continue }
 
     $isExactTcp22 = $portFilter.Protocol -in @('TCP', '6') -and @($portFilter.LocalPort).Count -eq 1 -and $portFilter.LocalPort -eq '22'
     if ($isExactTcp22) {
-        $addressFilter = $candidate | Get-NetFirewallAddressFilter
+        $addressFilter = $candidate | Get-NetFirewallAddressFilter -PolicyStore ActiveStore
         $existingProfiles = @(([string]$candidate.Profile -split '[,\s]+') | Where-Object { $_ })
         $sameSources = Test-StringSetEqual -Left @($addressFilter.RemoteAddress) -Right $AllowedRemoteAddress
         $sameProfiles = Test-StringSetEqual -Left $existingProfiles -Right $FirewallProfile
@@ -188,7 +188,7 @@ foreach ($candidate in $firewallAllowRules) {
         continue
     }
 
-    $addressFilter = $candidate | Get-NetFirewallAddressFilter
+    $addressFilter = $candidate | Get-NetFirewallAddressFilter -PolicyStore ActiveStore
     if (-not (Test-RemoteScopeContained -Existing @($addressFilter.RemoteAddress) -Requested $AllowedRemoteAddress)) {
         $broaderFirewallConflicts.Add("$($candidate.Name) [ports: $($portFilter.LocalPort); sources: $($addressFilter.RemoteAddress -join ', ')]")
     }
@@ -196,10 +196,10 @@ foreach ($candidate in $firewallAllowRules) {
 # Conservative by design: any enabled inbound block filter that could match
 # TCP/22 causes a stop, even if its address/profile scope may be disjoint.
 foreach ($candidate in $firewallBlockRules) {
-    $portFilter = $candidate | Get-NetFirewallPortFilter
+    $portFilter = $candidate | Get-NetFirewallPortFilter -PolicyStore ActiveStore
     if (Test-PortFilterIncludesSsh -PortFilter $portFilter) {
         if (-not (Test-FirewallRuleCouldMatchSshd -Rule $candidate -SshdPath $sshdPathForFirewallCheck)) { continue }
-        $addressFilter = $candidate | Get-NetFirewallAddressFilter
+        $addressFilter = $candidate | Get-NetFirewallAddressFilter -PolicyStore ActiveStore
         $blockingFirewallConflicts.Add("$($candidate.Name) [ports: $($portFilter.LocalPort -join ', '); sources: $($addressFilter.RemoteAddress -join ', ')]")
     }
 }
