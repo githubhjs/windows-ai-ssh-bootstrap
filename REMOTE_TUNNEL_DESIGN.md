@@ -12,7 +12,7 @@ that listener. No router port-forward or Windows WAN inbound rule is used.
 | GX10 | `g.hjs.space:1032` | Verified from Osaka; it reached `gx10-0cef`, and its ED25519 key matched the LAN address `192.168.2.93:22`. |
 | GX10, same home LAN | `192.168.2.93:22` | Used as a fallback to avoid NAT hairpinning. |
 | Osaka VPS | `osaka-v4.hjs.space:22` | Verified from HP-14s end to end. |
-| SJ AMD VPS | `sjamd-v4.hjs.space:22` | Not reachable during validation; TCP/22 timed out from GX10 and Osaka. The command is staged but cannot connect until the endpoint is restored and its account is provisioned. |
+| SJ AMD VPS | `sjamd-v4.hjs.space:22` | TCP/22 accepts connections, but SSH banner exchange times out from both GX10 and Osaka. No reverse-tunnel account/key is provisioned there; its command is staged but unverified. |
 
 GX10's public SSH port is **1032**. Port **1034** forwards to the EdgeRouter's own SSH service; it is
 not GX10. A PC on the home LAN cannot verify the public GX10 route because the router may not support
@@ -92,8 +92,10 @@ unattended scheduled tasks ran under SYSTEM:
   reach GX10's public endpoint from inside the LAN.
 - Osaka separately reached GX10 through `g.hjs.space:1032`; the ED25519 key was identical to the
   GX10 LAN key.
-- SJ AMD's SSH endpoint timed out and was not modified. Its CMD and pinned host key are prepared,
-  but the hub account cannot be provisioned or tested until the server becomes reachable.
+- SJ AMD's TCP/22 accepts a connection but never completes the SSH banner exchange; the direct
+  `ubuntu` SSH login and Cloudflare SSH route also timed out. The instance was not modified. Its CMD
+  and pinned host key are prepared, but the hub account cannot be provisioned or tested until the
+  SSH service becomes responsive.
 
 The Windows server host key used for the loopback callback was pinned and the GX10 client key
 successfully ran `hostname` through `127.0.0.1:51623`. See the private

@@ -97,9 +97,11 @@ restarts. The remote command creates no router forwarding or public inbound fire
 
 Download and run one CMD as Administrator, based on the hub you want this PC to call:
 
-- [`bootstrap-ssh-remote-gx10.cmd`](bootstrap-ssh-remote-gx10.cmd) — public endpoint `g.hjs.space:1032`; on the home LAN it first tries `192.168.2.93:22` to avoid NAT loopback.
-- [`bootstrap-ssh-remote-osaka.cmd`](bootstrap-ssh-remote-osaka.cmd) — `osaka-v4.hjs.space:22`.
-- [`bootstrap-ssh-remote-sjamd.cmd`](bootstrap-ssh-remote-sjamd.cmd) — `sjamd-v4.hjs.space:22` (the SJ SSH endpoint was unreachable during the 2026-11-01 validation; the command will wait and retry).
+- [Download the GX10 reverse-tunnel CMD](https://link.hjs.space/windows-ssh-gx10) — public endpoint `g.hjs.space:1032`; on the home LAN it first tries `192.168.2.93:22` to avoid NAT loopback.
+- [Download the Oracle Osaka reverse-tunnel CMD](https://link.hjs.space/windows-ssh-osaka) — `osaka-v4.hjs.space:22`.
+- [Download the Oracle SJ AMD reverse-tunnel CMD](https://link.hjs.space/windows-ssh-sjamd) — `sjamd-v4.hjs.space:22` (the TCP port responded during the 2026-11-01 validation, but the SSH banner timed out; the command is prepared and will retry).
+
+See the [reverse-tunnel design and validation record](https://link.hjs.space/windows-ssh-remote-guide) for server-side confinement, enrollment requirements, and test evidence.
 
 Each hub gets its own key and scheduled task. The tunnel port is derived deterministically from the
 device's Windows System UUID into 20000–59999; the port is an identifier, not a secret. The server
