@@ -112,6 +112,10 @@ can retrieve that public key through the existing trusted SSH path and enroll it
 asking the PC owner to copy it. A brand-new off-LAN PC still needs this one-time server-side key
 enrollment through a trusted channel.
 
+The reverse connection targets Windows SSH at `127.0.0.2:22` to avoid WSL's SSH server on
+`127.0.0.1:22`. Both are loopback addresses. Verify the reverse listener's host-key fingerprint
+matches the Windows SSH endpoint; a live port alone does not prove it reached Windows.
+
 GX10 is port **1032**. Port **1034** is the EdgeRouter SSH mapping, not GX10. From a LAN PC, do not
 use the public GX10 endpoint as proof of connectivity: NAT hairpinning may fail. The GX10 endpoint
 and host-key pin were verified from the Osaka VPS; the HP 14s tunnel was tested to GX10's private

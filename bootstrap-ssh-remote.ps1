@@ -41,7 +41,9 @@ if ($RunAgent) {
                     '-o', "UserKnownHostsFile=$($profile.KnownHostsPath)",
                     '-o', 'ServerAliveInterval=30', '-o', 'ServerAliveCountMax=3',
                     '-E', [string]$profile.SshLogPath,
-                    '-R', "127.0.0.1:$($profile.TunnelPort):127.0.0.1:22",
+                    # Windows sshd listens on 0.0.0.0 by default. Use a second loopback
+                    # address so a WSL sshd bound to 127.0.0.1:22 cannot capture the tunnel.
+                    '-R', "127.0.0.1:$($profile.TunnelPort):127.0.0.2:22",
                     "$($profile.User)@$($endpoint.Host)"
                 )
                 & $ssh @sshArgs

@@ -72,6 +72,11 @@ System UUID, in the range 20000–59999; GX10/Osaka may use the same number beca
 hosts. A central enrollment process must check for port collisions before authorizing a new key.
 For the HP 14s test machine, the assigned port is `51623`.
 
+The reverse forward targets Windows SSH on `127.0.0.2:22`, still within loopback. This avoids a
+WSL OpenSSH server that may already own Windows `127.0.0.1:22`; otherwise the tunnel can appear
+healthy while actually reaching Ubuntu. Confirm `127.0.0.2:22` presents the same host-key
+fingerprint as the Windows LAN SSH endpoint. The installer and the S11 test both use this target.
+
 The CMD outputs the public key and fingerprint only. The destination hub must enroll the key with
 the exact port restriction before the connection will authenticate. A machine reachable over a
 trusted LAN can have its public key collected and enrolled directly over the existing SSH channel.
